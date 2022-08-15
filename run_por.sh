@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to reproduce results
+# Script to reproduce results_add_data
 
 GPU_LIST=(0 1 2 3)
 

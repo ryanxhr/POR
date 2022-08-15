@@ -8,7 +8,7 @@ import time
 
 import utils
 import get_dataset
-from algos import TD3BC, CQL
+from algos import TD3BC, CQL, POR
 
 
 # Runs policy for X episodes and returns D4RL score
@@ -38,7 +38,7 @@ def eval_policy(policy, env_name, seed, mean, std, seed_offset=100, eval_episode
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Experiment
-    parser.add_argument("--root_dir", default="results")  # Policy name
+    parser.add_argument("--root_dir", default="results_add_data")  # Policy name
     parser.add_argument("--algorithm", default="CQL")  # Policy name
     parser.add_argument('--env', default="hopper-medium-v2")  # environment name
     parser.add_argument("--seed", default=0, type=int)  # Sets Gym, PyTorch and Numpy seeds

@@ -46,130 +46,90 @@ def qlearning_dataset(dataset, terminate_on_end=False):
     }
 
 
-def dataset_split_expert(dataset, split_x, exp_num, terminate_on_end=False):
+def dataset_add_data(dataset, terminate_on_end=False):
     """
-    Returns D_e and expert data in D_o of setting 2 in the paper.
+    Returns D_e and D_b.
     """
     N = dataset['rewards'].shape[0]
-    return_traj = []
-    obs_traj = [[]]
-    next_obs_traj = [[]]
-    action_traj = [[]]
-    reward_traj = [[]]
-    done_traj = [[]]
 
-    for i in range(N-1):
-        obs_traj[-1].append(dataset['observations'][i].astype(np.float32))
-        next_obs_traj[-1].append(dataset['observations'][i+1].astype(np.float32))
-        action_traj[-1].append(dataset['actions'][i].astype(np.float32))
-        reward_traj[-1].append(dataset['rewards'][i].astype(np.float32))
-        done_traj[-1].append(bool(dataset['terminals'][i]))
+    # D_b
+    start_b_num = int(0.2*N)
+    end_b_num = int(0.8*N)
+    obs_b = []
+    next_obs_b = []
+    action_b = []
+    reward_b = []
+    done_b = []
 
-        final_timestep = dataset['timeouts'][i] | dataset['terminals'][i]
+    episode_step = 0
+    for i in range(start_b_num, end_b_num):
+        obs = dataset['observations'][i].astype(np.float32)
+        new_obs = dataset['observations'][i+1].astype(np.float32)
+        action = dataset['actions'][i].astype(np.float32)
+        reward = dataset['rewards'][i].astype(np.float32)
+        done_bool = bool(dataset['terminals'][i])
+
+        final_timestep = dataset['timeouts'][i]
         if (not terminate_on_end) and final_timestep:
             # Skip this transition and don't apply terminals on the last step of an episode
-            return_traj.append(np.sum(reward_traj[-1]))
-            obs_traj.append([])
-            next_obs_traj.append([])
-            action_traj.append([])
-            reward_traj.append([])
-            done_traj.append([])
+            episode_step = 0
+            continue
+        if done_bool or final_timestep:
+            episode_step = 0
 
-    # select 10 trajectories
-    inds_all = list(range(len(obs_traj)))
-    inds_succ = inds_all[:exp_num]
-    inds_o = inds_succ[-split_x:]
-    inds_o = list(inds_o)
-    inds_succ = list(inds_succ)
-    inds_e = set(inds_succ) - set(inds_o)
-    inds_e = list(inds_e)
+        obs_b.append(obs)
+        next_obs_b.append(new_obs)
+        action_b.append(action)
+        reward_b.append(reward)
+        done_b.append(done_bool)
+        episode_step += 1
 
-    print('# select {} trajs in expert dataset as D_e'.format(len(inds_e)))
-    print('# select {} trajs in expert dataset as expert data in D_o'.format(len(inds_o)))
+    dataset_b = {
+        'observations': np.array(obs_b),
+        'actions': np.array(action_b),
+        'next_observations': np.array(next_obs_b),
+        'rewards': np.array(reward_b),
+        'terminals': np.array(done_b),
+    }
 
-    obs_traj_e = [obs_traj[i] for i in inds_e]
-    next_obs_traj_e = [next_obs_traj[i] for i in inds_e]
-    action_traj_e = [action_traj[i] for i in inds_e]
-    reward_traj_e = [reward_traj[i] for i in inds_e]
-    done_traj_e = [done_traj[i] for i in inds_e]
+    # D_e
+    start_e_num = int(0.3*N)
+    end_e_num = int(0.7*N)
+    obs_e = []
+    next_obs_e = []
+    action_e = []
+    reward_e = []
+    done_e = []
 
-    obs_traj_o = [obs_traj[i] for i in inds_o]
-    next_obs_traj_o = [next_obs_traj[i] for i in inds_o]
-    action_traj_o = [action_traj[i] for i in inds_o]
-    reward_traj_o = [reward_traj[i] for i in inds_o]
-    done_traj_o = [done_traj[i] for i in inds_o]
+    episode_step = 0
+    for i in range(start_e_num, end_e_num):
+        obs = dataset['observations'][i].astype(np.float32)
+        new_obs = dataset['observations'][i+1].astype(np.float32)
+        action = dataset['actions'][i].astype(np.float32)
+        reward = dataset['rewards'][i].astype(np.float32)
+        done_bool = bool(dataset['terminals'][i])
 
-    def concat_trajectories(trajectories):
-        return np.concatenate(trajectories, 0)
+        final_timestep = dataset['timeouts'][i]
+        if (not terminate_on_end) and final_timestep:
+            # Skip this transition and don't apply terminals on the last step of an episode
+            episode_step = 0
+            continue
+        if done_bool or final_timestep:
+            episode_step = 0
+
+        obs_e.append(obs)
+        next_obs_e.append(new_obs)
+        action_e.append(action)
+        reward_e.append(reward)
+        done_e.append(done_bool)
+        episode_step += 1
 
     dataset_e = {
-        'observations': concat_trajectories(obs_traj_e),
-        'actions': concat_trajectories(action_traj_e),
-        'next_observations': concat_trajectories(next_obs_traj_e),
-        'rewards': concat_trajectories(reward_traj_e),
-        'terminals': concat_trajectories(done_traj_e),
+        'observations': np.array(obs_e),
+        'actions': np.array(action_e),
+        'next_observations': np.array(next_obs_e),
+        'rewards': np.array(reward_e),
+        'terminals': np.array(done_e),
     }
 
-    dataset_o = {
-        'observations': concat_trajectories(obs_traj_o),
-        'actions': concat_trajectories(action_traj_o),
-        'next_observations': concat_trajectories(next_obs_traj_o),
-        'rewards': concat_trajectories(reward_traj_o),
-        'terminals': concat_trajectories(done_traj_o),
-    }
-
-    return dataset_e, dataset_o
-
-
-def dataset_T_trajs(dataset, T, terminate_on_end=False):
-    """
-    Returns T trajs from dataset.
-    """
-    N = dataset['rewards'].shape[0]
-    return_traj = []
-    obs_traj = [[]]
-    next_obs_traj = [[]]
-    action_traj = [[]]
-    reward_traj = [[]]
-    done_traj = [[]]
-
-    for i in range(N-1):
-        obs_traj[-1].append(dataset['observations'][i].astype(np.float32))
-        next_obs_traj[-1].append(dataset['observations'][i+1].astype(np.float32))
-        action_traj[-1].append(dataset['actions'][i].astype(np.float32))
-        reward_traj[-1].append(dataset['rewards'][i].astype(np.float32))
-        done_traj[-1].append(bool(dataset['terminals'][i]))
-
-        final_timestep = dataset['timeouts'][i] | dataset['terminals'][i]
-        if (not terminate_on_end) and final_timestep:
-            # Skip this transition and don't apply terminals on the last step of an episode
-            return_traj.append(np.sum(reward_traj[-1]))
-            obs_traj.append([])
-            next_obs_traj.append([])
-            action_traj.append([])
-            reward_traj.append([])
-            done_traj.append([])
-
-    # select T trajectories
-    inds_all = list(range(len(obs_traj)))
-    inds = inds_all[:T]
-    inds = list(inds)
-
-    print('# select {} trajs in the dataset'.format(T))
-
-    obs_traj = [obs_traj[i] for i in inds]
-    next_obs_traj = [next_obs_traj[i] for i in inds]
-    action_traj = [action_traj[i] for i in inds]
-    reward_traj = [reward_traj[i] for i in inds]
-    done_traj = [done_traj[i] for i in inds]
-
-    def concat_trajectories(trajectories):
-        return np.concatenate(trajectories, 0)
-
-    return {
-        'observations': concat_trajectories(obs_traj),
-        'actions': concat_trajectories(action_traj),
-        'next_observations': concat_trajectories(next_obs_traj),
-        'rewards': concat_trajectories(reward_traj),
-        'terminals': concat_trajectories(done_traj),
-    }
+    return dataset_e, dataset_b
