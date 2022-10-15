@@ -59,7 +59,6 @@ if __name__ == "__main__":
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
-    dataset_name = f"{args.env}_norm_s-{1-args.no_state_normalize}_norm_r-{1-args.no_reward_normalize}"
 
     # Set evaluation episode and interval
     if 'antmaze' in args.env:
@@ -79,10 +78,10 @@ if __name__ == "__main__":
         algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}"
 
     # checkpoint dir
-    os.makedirs(f"{args.root_dir}/{dataset_name}/{algo_name}", exist_ok=True)
-    save_dir = f"{args.root_dir}/{dataset_name}/{algo_name}/seed-{args.seed}.txt"
+    os.makedirs(f"{args.root_dir}/{args.env}/{algo_name}", exist_ok=True)
+    save_dir = f"{args.root_dir}/{args.env}/{algo_name}/seed-{args.seed}.txt"
     print("---------------------------------------")
-    print(f"Dataset: {dataset_name}, Algorithm: {algo_name}, Seed: {args.seed}")
+    print(f"Dataset: {args.env}, Algorithm: {algo_name}, Seed: {args.seed}")
     print("---------------------------------------")
 
     # Load dataset
