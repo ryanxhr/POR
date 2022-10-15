@@ -149,7 +149,7 @@ class POR(object):
             eta=0.005,
             tau=0.9,
             alpha=0.5,
-            g_weight=True,
+            g_alpha=False,
             e_weight=True,
     ):
 
@@ -169,7 +169,7 @@ class POR(object):
 
         self.tau = tau
         self.alpha = alpha
-        self.g_weight = g_weight
+        self.g_alpha = g_alpha
         self.e_weight = e_weight
 
         self.discount = discount
@@ -216,7 +216,7 @@ class POR(object):
         log_pi_g = self.policy_g.get_log_density(state, next_state)
         log_pi_g = torch.sum(log_pi_g, 1)
 
-        if self.g_weight:
+        if not self.g_alpha:
             p_g_loss = -(weight * log_pi_g).mean()
         else:
             g, _, _ = self.policy_g(state)
@@ -234,7 +234,7 @@ class POR(object):
         log_pi_a = self.policy_e.get_log_density(state, next_state, action)
         log_pi_a = torch.sum(log_pi_a, 1)
 
-        if self.g_weight:
+        if self.e_weight:
             p_e_loss = -(weight * log_pi_a).mean()
         else:
             p_e_loss = -log_pi_a.mean()

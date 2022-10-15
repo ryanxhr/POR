@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", default=256, type=int)  # Batch size for both actor and critic
     parser.add_argument("--tau", default=0.7, type=float)
     parser.add_argument("--alpha", default=1.0, type=float)
-    parser.add_argument("--no_g_weight", action='store_true')
+    parser.add_argument("--g_alpha", action='store_true')
     parser.add_argument("--no_e_weight", action='store_true')
     parser.add_argument('--max_episode_steps', default=1000, type=int)
     args = parser.parse_args()
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     # Initialize policy
     if args.algorithm == 'POR':
         policy = POR.POR(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau,
-                         g_weight=1-args.no_g_weight, e_weight=1-args.no_g_weight)
-        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}"
+                         g_alpha=args.g_alpha, e_weight=1-args.no_e_weight)
+        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}_g_alpha-{args.g_alpha}_e_weight-{not args.no_e_weight}"
     elif args.algorithm == 'IQL':
         policy = IQL.IQL(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau)
         algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}"
