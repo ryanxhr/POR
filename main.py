@@ -37,14 +37,14 @@ if __name__ == "__main__":
     # Experiment
     parser.add_argument("--root_dir", default="results")  # Policy name
     parser.add_argument("--algorithm", default="POR")  # Policy name
-    parser.add_argument('--env', default="walker2d-medium-replay-v2")  # environment name
+    parser.add_argument('--env', default="antmaze-medium-diverse-v2")  # environment name
     parser.add_argument("--seed", default=0, type=int)  # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--max_timesteps", default=1e6, type=int)  # Max time steps to run environment
     # Algo
     parser.add_argument("--batch_size", default=256, type=int)  # Batch size for both actor and critic
-    parser.add_argument("--tau", default=0.7, type=float)
-    parser.add_argument("--alpha", default=1.0, type=float)
-    parser.add_argument("--g_alpha", action='store_true')
+    parser.add_argument("--tau", default=0.9, type=float)
+    parser.add_argument("--alpha", default=10.0, type=float)
+    parser.add_argument("--g_v", action='store_true')
     parser.add_argument("--no_e_weight", action='store_true')
     parser.add_argument('--max_episode_steps', default=1000, type=int)
     args = parser.parse_args()
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     # Initialize policy
     if args.algorithm == 'POR':
         policy = POR.POR(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau,
-                         g_alpha=args.g_alpha, e_weight=1-args.no_e_weight)
-        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}_g_alpha-{args.g_alpha}_e_weight-{not args.no_e_weight}"
+                         g_v=args.g_v, e_weight=1-args.no_e_weight)
+        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}_g_v-{args.g_v}_e_weight-{not args.no_e_weight}"
     elif args.algorithm == 'IQL':
         policy = IQL.IQL(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau)
         algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}"

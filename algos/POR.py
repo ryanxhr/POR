@@ -148,8 +148,9 @@ class POR(object):
             discount=0.99,
             eta=0.005,
             tau=0.9,
-            alpha=0.5,
-            g_alpha=False,
+            alpha=10.0,
+            lmbda=10.0,
+            g_v=False,
             e_weight=True,
     ):
 
@@ -169,7 +170,8 @@ class POR(object):
 
         self.tau = tau
         self.alpha = alpha
-        self.g_alpha = g_alpha
+        self.lmbda = lmbda
+        self.g_v = g_v
         self.e_weight = e_weight
 
         self.discount = discount
@@ -210,22 +212,21 @@ class POR(object):
             target_v = (reward + self.discount * not_done * next_v).detach()
             v1, v2 = self.critic(state)
             residual = target_v - v1
-            weight = torch.exp(residual * 10)
+            weight = torch.exp(residual * self.alpha)
             weight = torch.clamp(weight, max=100.0).squeeze(-1).detach()
 
         log_pi_g = self.policy_g.get_log_density(state, next_state)
         log_pi_g = torch.sum(log_pi_g, 1)
 
-        if not self.g_alpha:
+        if not self.g_v:
             p_g_loss = -(weight * log_pi_g).mean()
         else:
             g, _, _ = self.policy_g(state)
             v1_g, v2_g = self.critic(g)
             min_v_g = torch.squeeze(torch.min(v1_g, v2_g))
-            log_pi_g = self.policy_g.get_log_density(state, next_state)
-            log_pi_g = torch.sum(log_pi_g, 1)
-            p_g_loss = (self.alpha * log_pi_g - min_v_g).mean()
-        
+            lmbda = self.lmbda / min_v_g.abs().mean().detach()
+            p_g_loss = -(weight * log_pi_g + lmbda * min_v_g).mean()
+
         self.policy_g_optimizer.zero_grad()
         p_g_loss.backward()
         self.policy_g_optimizer.step()
