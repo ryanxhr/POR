@@ -9,7 +9,7 @@ We hope that POR could shed light on how to enable state-stitching in offline RL
 
 To more clearly see the benefits of state-stitching over action-stitching, we reimplement IQL using our codebase and compare a variant of POR, namely POR-r (using the residual of value function as the weight to learn the guide-policy and the execute-policy by weighted BC) vs IQL. We use the same network sizes and hyperparameter ($\tau$). It is shown below that POR-r outperforms IQL, sometimes by a large margin.
 
-![image](https://github.com/ryanxhr/POR/tree/main/figures/results.png)
+![image](figures/results.png)
 
 
 ### Bibtex
