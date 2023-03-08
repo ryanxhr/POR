@@ -71,52 +71,28 @@ def main(args):
     policy = GaussianPolicy(obs_dim + obs_dim, act_dim, hidden_dim=1024, n_hidden=2)
     goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
 
-    if args.type != 'iql':
-        por = POR(
-            qf=TwinQ(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
-            vf=TwinV(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
-            policy=policy,
-            goal_policy=goal_policy,
-            max_steps=args.n_steps,
-            tau=args.tau,
-            alpha=args.alpha,
-            discount=args.discount,
-            lr=args.lr
-        )
+    por = POR(
+        qf=TwinQ(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+        vf=TwinV(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+        policy=policy,
+        goal_policy=goal_policy,
+        max_steps=args.n_steps,
+        tau=args.tau,
+        alpha=args.alpha,
+        discount=args.discount,
+        lr=args.lr
+    )
 
-        def eval_por(step):
-            eval_returns = np.array([evaluate_por(env, policy, goal_policy, mean, std) \
-                                     for _ in range(args.n_eval_episodes)])
-            normalized_returns = d4rl.get_normalized_score(args.env_name, eval_returns) * 100.0
-            wandb.log({
-                'return mean': eval_returns.mean(),
-                'normalized return mean': normalized_returns.mean(),
-            }, step=step)
+    def eval_por(step):
+        eval_returns = np.array([evaluate_por(env, policy, goal_policy, mean, std) \
+                                 for _ in range(args.n_eval_episodes)])
+        normalized_returns = d4rl.get_normalized_score(args.env_name, eval_returns) * 100.0
+        wandb.log({
+            'return mean': eval_returns.mean(),
+            'normalized return mean': normalized_returns.mean(),
+        }, step=step)
 
-            return normalized_returns.mean()
-    else:
-        por = POR(
-            qf=TwinQ(obs_dim, act_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
-            vf=ValueFunction(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
-            policy=policy,
-            goal_policy=goal_policy,
-            max_steps=args.n_steps,
-            tau=args.tau,
-            alpha=args.alpha,
-            discount=args.discount,
-            lr=args.lr
-        )
-
-        def eval_por(step):
-            eval_returns = np.array([evaluate_iql(env, policy, mean, std) \
-                                     for _ in range(args.n_eval_episodes)])
-            normalized_returns = d4rl.get_normalized_score(args.env_name, eval_returns) * 100.0
-            wandb.log({
-                'return mean': eval_returns.mean(),
-                'normalized return mean': normalized_returns.mean(),
-            }, step=step)
-
-            return normalized_returns.mean()
+        return normalized_returns.mean()
 
     # pretrain behavior goal policy if needed
     if any(s in args.env_name for s in ('halfcheetah', 'hopper', 'walker2d')):
@@ -138,12 +114,10 @@ def main(args):
         os.makedirs(f"{args.log_dir}/{args.env_name}/{algo_name}", exist_ok=True)
         eval_log = open(f"{args.log_dir}/{args.env_name}/{algo_name}/seed-{args.seed}.txt", 'w')
         for step in trange(args.n_steps):
-            if args.type == 'por':  # learn goal policy by q-learning
+            if args.type == 'por':  # learn goal policy by q-learning (mujoco results in the paper)
                 por.por_update(**sample_batch(dataset, args.batch_size))
-            elif args.type == 'por_r':  # learn goal policy by weighted BC
+            elif args.type == 'por_r':  # learn goal policy by weighted BC (antmaze reuslts in the paper)
                 por.por_update_residual(**sample_batch(dataset, args.batch_size))
-            elif args.type == 'iql':
-                por.iql_update(**sample_batch(dataset, args.batch_size))
 
             if (step+1) % args.eval_period == 0:
                 average_returns = eval_por(step)
@@ -173,7 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_eval_episodes', type=int, default=10)
     parser.add_argument('--max_episode_steps', type=int, default=1000)
     parser.add_argument("--normalize", action='store_true')
-    parser.add_argument("--type", type=str, choices=['por', 'por_r', 'iql'], default='por_r')
+    parser.add_argument("--type", type=str, choices=['por', 'por_r'], default='por_r')
     parser.add_argument("--pretrain", action='store_true')
     # parser.add_argument("--ablation_type", type=str, required=True, choices=['None', 'generlization'])
     now = time.strftime("%Y%m%d_%H%M%S", time.localtime())
