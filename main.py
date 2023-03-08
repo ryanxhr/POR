@@ -1,112 +1,182 @@
-import numpy as np
-import torch
+from dataclasses import dataclass
+from pathlib import Path
+
 import gym
-import argparse
 import os
 import d4rl
+import sys
+import numpy as np
+import torch
+from tqdm import trange
 
-import utils
-import get_dataset
-from algos import POR, IQL
-
-
-def eval_policy(policy, env_name, seed, min, max, seed_offset=100, eval_episodes=10):
-    eval_env = gym.make(env_name)
-    eval_env.seed(seed + seed_offset)
-
-    avg_reward = 0.
-    for _ in range(eval_episodes):
-        state, done = eval_env.reset(), False
-        while not done:
-            state = 2 * (np.array(state).reshape(1, -1) - min) / (max - min) - 1
-            action = policy.select_action(state)
-            state, reward, done, _ = eval_env.step(action)
-            avg_reward += reward
-
-    avg_reward /= eval_episodes
-    d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
-
-    print("---------------------------------------")
-    print(f"Env: {env_name}, Evaluation over {eval_episodes} episodes: {avg_reward:.3f}, D4RL score: {d4rl_score:.3f}")
-    print("---------------------------------------")
-    return d4rl_score
+from por import POR
+from policy import GaussianPolicy
+from value_functions import TwinQ, ValueFunction, TwinV
+from util import return_range, set_seed, Log, sample_batch, torchify, evaluate_iql, evaluate_por
+import wandb
+import time
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # Experiment
-    parser.add_argument("--root_dir", default="results")  # Policy name
-    parser.add_argument("--algorithm", default="POR")  # Policy name
-    parser.add_argument('--env', default="antmaze-medium-diverse-v2")  # environment name
-    parser.add_argument("--seed", default=0, type=int)  # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--max_timesteps", default=1e6, type=int)  # Max time steps to run environment
-    # Algo
-    parser.add_argument("--batch_size", default=256, type=int)  # Batch size for both actor and critic
-    parser.add_argument("--tau", default=0.9, type=float)
-    parser.add_argument("--alpha", default=10.0, type=float)
-    parser.add_argument("--g_v", action='store_true')
-    parser.add_argument("--no_e_weight", action='store_true')
-    parser.add_argument('--max_episode_steps', default=1000, type=int)
-    args = parser.parse_args()
+def get_env_and_dataset(env_name, max_episode_steps, normalize):
+    env = gym.make(env_name)
+    dataset = d4rl.qlearning_dataset(env)
+    if any(s in env_name for s in ('halfcheetah', 'hopper', 'walker2d')):
+        min_ret, max_ret = return_range(dataset, max_episode_steps)
+        print(f'Dataset returns have range [{min_ret}, {max_ret}]')
+        dataset['rewards'] /= (max_ret - min_ret)
+        dataset['rewards'] *= max_episode_steps
+    elif 'antmaze' in env_name:
+        dataset['rewards'] -= 1.
 
-    # Set seeds
-    env = gym.make(args.env)
-    env.seed(args.seed)
-    env.action_space.seed(args.seed)
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    max_action = float(env.action_space.high[0])
-
-    # Set evaluation episode and interval
-    if 'antmaze' in args.env:
-        eval_freq = 50000
-        eval_episodes = 100
+    # dones = dataset["timeouts"]
+    print("***********************************************************************")
+    print(f"Normalize for the state: {normalize}")
+    print("***********************************************************************")
+    if normalize:
+        mean = dataset['observations'].mean(0)
+        std = dataset['observations'].std(0) + 1e-3
+        dataset['observations'] = (dataset['observations'] - mean)/std
+        dataset['next_observations'] = (dataset['next_observations'] - mean)/std
     else:
-        eval_freq = 5000
-        eval_episodes = 10
+        obs_dim = dataset['observations'].shape[1]
+        mean, std = np.zeros(obs_dim), np.ones(obs_dim)
 
-    # Initialize policy
-    if args.algorithm == 'POR':
-        policy = POR.POR(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau,
-                         g_v=args.g_v, e_weight=1-args.no_e_weight)
-        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}_g_v-{args.g_v}_e_weight-{not args.no_e_weight}"
-    elif args.algorithm == 'IQL':
-        policy = IQL.IQL(state_dim, action_dim, max_action, alpha=args.alpha, tau=args.tau)
-        algo_name = f"{args.algorithm}_alpha-{args.alpha}_tau-{args.tau}"
+    for k, v in dataset.items():
+        dataset[k] = torchify(v)
 
-    # checkpoint dir
-    os.makedirs(f"{args.root_dir}/{args.env}/{algo_name}", exist_ok=True)
-    save_dir = f"{args.root_dir}/{args.env}/{algo_name}/seed-{args.seed}.txt"
-    print("---------------------------------------")
-    print(f"Dataset: {args.env}, Algorithm: {algo_name}, Seed: {args.seed}")
-    print("---------------------------------------")
+    return env, dataset, mean, std
 
-    # Load dataset
-    raw_dataset = env.get_dataset()
-    dataset = get_dataset.qlearning_dataset(raw_dataset)
-    states = dataset['observations']
-    print('# {} of demonstraions'.format(states.shape[0]))
 
-    replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
-    replay_buffer.convert_D4RL(dataset)
+def main(args):
+    wandb.init(project="POR_reproduce",
+               entity="ryanxhr",
+               name=f"{args.env_name}",
+               config={
+                   "env_name": args.env_name,
+                   "normalize": args.normalize,
+                   "tau": args.tau,
+                   "alpha": args.alpha,
+                   "seed": args.seed,
+                   "type": args.type,
+               })
+    torch.set_num_threads(1)
 
-    min_s = np.min(states, 0)
-    max_s = np.max(states, 0)
-    replay_buffer.normalize_states_minmax(min=min_s, max=max_s)
+    env, dataset, mean, std = get_env_and_dataset(args.env_name,
+                                                  args.max_episode_steps,
+                                                  args.normalize)
+    obs_dim = dataset['observations'].shape[1]
+    act_dim = dataset['actions'].shape[1]   # this assume continuous actions
+    set_seed(args.seed, env=env)
 
-    replay_buffer.normalize_rewards(args.env, args.max_episode_steps)
+    policy = GaussianPolicy(obs_dim + obs_dim, act_dim, hidden_dim=1024, n_hidden=2)
+    goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
 
-    eval_log = open(save_dir, 'w')
-    # Start training
-    for t in range(int(args.max_timesteps)):
-        policy.train(replay_buffer, args.batch_size)
-        # Evaluate episode
-        if (t + 1) % eval_freq == 0:
-            print(f"Time steps: {t + 1}")
-            average_returns = eval_policy(policy, args.env, args.seed, min_s, max_s, eval_episodes=eval_episodes)
-            eval_log.write(f'{t + 1}\t{average_returns}\n')
-            eval_log.flush()
-    eval_log.close()
+    if args.type != 'iql':
+        por = POR(
+            qf=TwinQ(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+            vf=TwinV(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+            policy=policy,
+            goal_policy=goal_policy,
+            max_steps=args.n_steps,
+            tau=args.tau,
+            alpha=args.alpha,
+            discount=args.discount,
+            lr=args.lr
+        )
+
+        def eval_por(step):
+            eval_returns = np.array([evaluate_por(env, policy, goal_policy, mean, std) \
+                                     for _ in range(args.n_eval_episodes)])
+            normalized_returns = d4rl.get_normalized_score(args.env_name, eval_returns) * 100.0
+            wandb.log({
+                'return mean': eval_returns.mean(),
+                'normalized return mean': normalized_returns.mean(),
+            }, step=step)
+
+            return normalized_returns.mean()
+    else:
+        por = POR(
+            qf=TwinQ(obs_dim, act_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+            vf=ValueFunction(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+            policy=policy,
+            goal_policy=goal_policy,
+            max_steps=args.n_steps,
+            tau=args.tau,
+            alpha=args.alpha,
+            discount=args.discount,
+            lr=args.lr
+        )
+
+        def eval_por(step):
+            eval_returns = np.array([evaluate_iql(env, policy, mean, std) \
+                                     for _ in range(args.n_eval_episodes)])
+            normalized_returns = d4rl.get_normalized_score(args.env_name, eval_returns) * 100.0
+            wandb.log({
+                'return mean': eval_returns.mean(),
+                'normalized return mean': normalized_returns.mean(),
+            }, step=step)
+
+            return normalized_returns.mean()
+
+    # pretrain behavior goal policy if needed
+    if any(s in args.env_name for s in ('halfcheetah', 'hopper', 'walker2d')):
+        b_goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
+        por.pretrain_init(b_goal_policy)
+        if args.pretrain:
+            for _ in trange(args.n_steps):
+                por.pretrain(**sample_batch(dataset, args.batch_size))
+            algo_name = f"pretrain_step-{args.n_steps}_normalize-{args.normalize}"
+            os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
+            por.save_pretrain(f"{args.model_dir}/{args.env_name}/{algo_name}")
+        else:
+            algo_name = f"pretrain_step-{args.n_steps}_normalize-{args.normalize}"
+            por.load_pretrain(f"{args.model_dir}/{args.env_name}/{algo_name}")
+
+    # train por
+    if not args.pretrain:
+        algo_name = f"{args.type}_alpha-{args.alpha}_tau-{args.tau}_alpha-{args.alpha}_normalize-{args.normalize}"
+        os.makedirs(f"{args.log_dir}/{args.env_name}/{algo_name}", exist_ok=True)
+        eval_log = open(f"{args.log_dir}/{args.env_name}/{algo_name}/seed-{args.seed}.txt", 'w')
+        for step in trange(args.n_steps):
+            if args.type == 'por':  # learn goal policy by q-learning
+                por.por_update(**sample_batch(dataset, args.batch_size))
+            elif args.type == 'por_r':  # learn goal policy by weighted BC
+                por.por_update_residual(**sample_batch(dataset, args.batch_size))
+            elif args.type == 'iql':
+                por.iql_update(**sample_batch(dataset, args.batch_size))
+
+            if (step+1) % args.eval_period == 0:
+                average_returns = eval_por(step)
+                eval_log.write(f'{step + 1}\t{average_returns}\n')
+                eval_log.flush()
+        eval_log.close()
+        os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
+        por.save(f"{args.model_dir}/{args.env_name}/{algo_name}")
+
+
+if __name__ == '__main__':
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument('--env_name', type=str, default="antmaze-medium-play-v2")
+    parser.add_argument('--log_dir', type=str, default="./results/")
+    parser.add_argument('--model_dir', type=str, default="./models/")
+    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--discount', type=float, default=0.99)
+    parser.add_argument('--hidden_dim', type=int, default=256)
+    parser.add_argument('--n_hidden', type=int, default=2)
+    parser.add_argument('--n_steps', type=int, default=10**6)
+    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--tau', type=float, default=0.7)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--alpha', type=float, default=10.0)
+    parser.add_argument('--eval_period', type=int, default=5000)
+    parser.add_argument('--n_eval_episodes', type=int, default=10)
+    parser.add_argument('--max_episode_steps', type=int, default=1000)
+    parser.add_argument("--normalize", action='store_true')
+    parser.add_argument("--type", type=str, choices=['por', 'por_r', 'iql'], default='por_r')
+    parser.add_argument("--pretrain", action='store_true')
+    # parser.add_argument("--ablation_type", type=str, required=True, choices=['None', 'generlization'])
+    now = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    args = parser.parse_args()
+    
+    main(args)
