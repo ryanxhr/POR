@@ -5,6 +5,7 @@ This is the code for reproducing the results of the paper A Policy-Guided Imitat
 Policy-guided Offline RL (POR) is a new offline RL paradigm, it enables **state-stitching** from the dataset rather than **action-stitching** as conducted in prior offline RL methods. POR enjoys training stability by using *in-sample* learning while still allowing logical *out-of-sample* generalization.
 We hope that POR could shed light on how to enable state-stitching in offline RL, which connects well to goal-conditioned RL and hierarchical RL. 
 
+### Usage
 Paper reuslts can be reproduced by first running `./pretrain.sh` then `./run_por.sh`.
 
 ### Bibtex

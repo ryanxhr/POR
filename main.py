@@ -58,6 +58,9 @@ def main(args):
                    "alpha": args.alpha,
                    "seed": args.seed,
                    "type": args.type,
+                   "value_lr": args.value_lr,
+                   "policy_lr": args.policy_lr,
+                   "pretrain": args.pretrain,
                })
     torch.set_num_threads(1)
 
@@ -76,11 +79,12 @@ def main(args):
         vf=TwinV(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
         policy=policy,
         goal_policy=goal_policy,
-        max_steps=args.n_steps,
+        max_steps=args.train_steps,
         tau=args.tau,
         alpha=args.alpha,
         discount=args.discount,
-        lr=args.lr
+        value_lr=args.value_lr,
+        policy_lr=args.policy_lr,
     )
 
     def eval_por(step):
@@ -99,13 +103,13 @@ def main(args):
         b_goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
         por.pretrain_init(b_goal_policy)
         if args.pretrain:
-            for _ in trange(args.n_steps):
+            for _ in trange(args.pretrain_steps):
                 por.pretrain(**sample_batch(dataset, args.batch_size))
-            algo_name = f"pretrain_step-{args.n_steps}_normalize-{args.normalize}"
+            algo_name = f"pretrain_step-{args.pretrain_steps}_normalize-{args.normalize}"
             os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
             por.save_pretrain(f"{args.model_dir}/{args.env_name}/{algo_name}")
         else:
-            algo_name = f"pretrain_step-{args.n_steps}_normalize-{args.normalize}"
+            algo_name = f"pretrain_step-{args.pretrain_steps}_normalize-{args.normalize}"
             por.load_pretrain(f"{args.model_dir}/{args.env_name}/{algo_name}")
 
     # train por
@@ -113,11 +117,11 @@ def main(args):
         algo_name = f"{args.type}_alpha-{args.alpha}_tau-{args.tau}_alpha-{args.alpha}_normalize-{args.normalize}"
         os.makedirs(f"{args.log_dir}/{args.env_name}/{algo_name}", exist_ok=True)
         eval_log = open(f"{args.log_dir}/{args.env_name}/{algo_name}/seed-{args.seed}.txt", 'w')
-        for step in trange(args.n_steps):
-            if args.type == 'por':  # learn goal policy by q-learning (mujoco results in the paper)
-                por.por_update(**sample_batch(dataset, args.batch_size))
-            elif args.type == 'por_r':  # learn goal policy by weighted BC (antmaze reuslts in the paper)
+        for step in trange(args.train_steps):
+            if args.type == 'por_r':  # learn goal policy by weighted BC using the residual (more stable)
                 por.por_update_residual(**sample_batch(dataset, args.batch_size))
+            elif args.type == 'por_q':  # learn goal policy by q-learning (need to pretrain a behavior goal policy)
+                por.por_update_qlearning(**sample_batch(dataset, args.batch_size))
 
             if (step+1) % args.eval_period == 0:
                 average_returns = eval_por(step)
@@ -138,16 +142,18 @@ if __name__ == '__main__':
     parser.add_argument('--discount', type=float, default=0.99)
     parser.add_argument('--hidden_dim', type=int, default=256)
     parser.add_argument('--n_hidden', type=int, default=2)
-    parser.add_argument('--n_steps', type=int, default=10**6)
+    parser.add_argument('--pretrain_steps', type=int, default=5*10**5)
+    parser.add_argument('--train_steps', type=int, default=10**6)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--tau', type=float, default=0.7)
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--value_lr', type=float, default=1e-4)
+    parser.add_argument('--policy_lr', type=float, default=1e-4)
     parser.add_argument('--alpha', type=float, default=10.0)
     parser.add_argument('--eval_period', type=int, default=5000)
     parser.add_argument('--n_eval_episodes', type=int, default=10)
     parser.add_argument('--max_episode_steps', type=int, default=1000)
     parser.add_argument("--normalize", action='store_true')
-    parser.add_argument("--type", type=str, choices=['por', 'por_r'], default='por_r')
+    parser.add_argument("--type", type=str, choices=['por_r', 'por_q'], default='por_r')
     parser.add_argument("--pretrain", action='store_true')
     # parser.add_argument("--ablation_type", type=str, required=True, choices=['None', 'generlization'])
     now = time.strftime("%Y%m%d_%H%M%S", time.localtime())
