@@ -48,7 +48,7 @@ def get_env_and_dataset(env_name, max_episode_steps, normalize):
 
 
 def main(args):
-    wandb.init(project="POR_reproduce",
+    wandb.init(project="por_reproduce_final",
                entity="ryanxhr",
                name=f"{args.env_name}",
                config={
@@ -99,7 +99,7 @@ def main(args):
         return normalized_returns.mean()
 
     # pretrain behavior goal policy if needed
-    if any(s in args.env_name for s in ('halfcheetah', 'hopper', 'walker2d')):
+    if any(s in args.env_name for s in ('halfcheetah', 'hopper', 'walker2d')) and args.type == 'por_q':
         b_goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
         por.pretrain_init(b_goal_policy)
         if args.pretrain:
@@ -119,9 +119,11 @@ def main(args):
         eval_log = open(f"{args.log_dir}/{args.env_name}/{algo_name}/seed-{args.seed}.txt", 'w')
         for step in trange(args.train_steps):
             if args.type == 'por_r':  # learn goal policy by weighted BC using the residual (more stable)
-                por.por_update_residual(**sample_batch(dataset, args.batch_size))
+                por.por_residual_update(**sample_batch(dataset, args.batch_size))
             elif args.type == 'por_q':  # learn goal policy by q-learning (need to pretrain a behavior goal policy)
-                por.por_update_qlearning(**sample_batch(dataset, args.batch_size))
+                por.por_qlearning_update(**sample_batch(dataset, args.batch_size))
+            elif args.type == 'por_r_sql':  # learn goal policy by weighted BC using the residual (more stable)
+                por.por_residual_sql_update(**sample_batch(dataset, args.batch_size))
 
             if (step+1) % args.eval_period == 0:
                 average_returns = eval_por(step)
@@ -135,28 +137,28 @@ def main(args):
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('--env_name', type=str, default="antmaze-medium-play-v2")
+    parser.add_argument('--env_name', type=str, default="antmaze-medium-diverse-v2")
     parser.add_argument('--log_dir', type=str, default="./results/")
     parser.add_argument('--model_dir', type=str, default="./models/")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--discount', type=float, default=0.99)
     parser.add_argument('--hidden_dim', type=int, default=256)
     parser.add_argument('--n_hidden', type=int, default=2)
-    parser.add_argument('--pretrain_steps', type=int, default=5*10**5)
+    parser.add_argument('--pretrain_steps', type=int, default=10**6)
     parser.add_argument('--train_steps', type=int, default=10**6)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--tau', type=float, default=0.7)
+    parser.add_argument('--tau', type=float, default=0.9)
     parser.add_argument('--value_lr', type=float, default=1e-4)
     parser.add_argument('--policy_lr', type=float, default=1e-4)
     parser.add_argument('--alpha', type=float, default=10.0)
-    parser.add_argument('--eval_period', type=int, default=5000)
-    parser.add_argument('--n_eval_episodes', type=int, default=10)
+    parser.add_argument('--eval_period', type=int, default=10000)
+    parser.add_argument('--n_eval_episodes', type=int, default=50)
     parser.add_argument('--max_episode_steps', type=int, default=1000)
     parser.add_argument("--normalize", action='store_true')
-    parser.add_argument("--type", type=str, choices=['por_r', 'por_q'], default='por_r')
+    parser.add_argument("--type", type=str, choices=['por_r', 'por_q', 'por_r_sql'], default='por_r')
     parser.add_argument("--pretrain", action='store_true')
     # parser.add_argument("--ablation_type", type=str, required=True, choices=['None', 'generlization'])
     now = time.strftime("%Y%m%d_%H%M%S", time.localtime())
     args = parser.parse_args()
-    
+
     main(args)
