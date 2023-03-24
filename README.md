@@ -6,7 +6,7 @@ Policy-guided Offline RL (POR) is a new offline RL paradigm, it enables **state-
 We hope that POR could shed light on how to enable state-stitching in offline RL, which connects well to goal-conditioned RL and hierarchical RL. 
 
 ### Usage
-Paper reuslts can be reproduced by first running `./pretrain.sh` and then running `./run_mujoco.sh` and `./run_antmaze.sh`. See the results [here](https://wandb.ai/ryanxhr/por_reproduce_final/overview?workspace=user-ryanxhr).
+Mujoco reuslts can be reproduced by first running `./pretrain.sh` and then running `./run_mujoco.sh`, Antmaze results can be reproduced by running `./run_antmaze.sh`. See our running results [here](https://wandb.ai/ryanxhr/POR_paper?workspace=user-ryanxhr).
 
 ### Bibtex
 ```

@@ -11,8 +11,8 @@ from tqdm import trange
 
 from por import POR
 from policy import GaussianPolicy
-from value_functions import TwinQ, ValueFunction, TwinV
-from util import return_range, set_seed, Log, sample_batch, torchify, evaluate_iql, evaluate_por
+from value_functions import TwinV
+from util import return_range, set_seed, Log, sample_batch, torchify, evaluate_por
 import wandb
 import time
 
@@ -48,8 +48,8 @@ def get_env_and_dataset(env_name, max_episode_steps, normalize):
 
 
 def main(args):
-    wandb.init(project="por_reproduce_final",
-               entity="ryanxhr",
+    wandb.init(project="project_name",
+               entity="your_wandb_id",
                name=f"{args.env_name}",
                config={
                    "env_name": args.env_name,
@@ -75,8 +75,7 @@ def main(args):
     goal_policy = GaussianPolicy(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden)
 
     por = POR(
-        qf=TwinQ(obs_dim, obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
-        vf=TwinV(obs_dim, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
+        vf=TwinV(obs_dim, layer_norm=args.layer_norm, hidden_dim=args.hidden_dim, n_hidden=args.n_hidden),
         policy=policy,
         goal_policy=goal_policy,
         max_steps=args.train_steps,
@@ -114,16 +113,14 @@ def main(args):
 
     # train por
     if not args.pretrain:
-        algo_name = f"{args.type}_alpha-{args.alpha}_tau-{args.tau}_alpha-{args.alpha}_normalize-{args.normalize}"
+        algo_name = f"{args.type}_tau-{args.tau}_alpha-{args.alpha}_normalize-{args.normalize}"
         os.makedirs(f"{args.log_dir}/{args.env_name}/{algo_name}", exist_ok=True)
         eval_log = open(f"{args.log_dir}/{args.env_name}/{algo_name}/seed-{args.seed}.txt", 'w')
         for step in trange(args.train_steps):
-            if args.type == 'por_r':  # learn goal policy by weighted BC using the residual (more stable)
+            if args.type == 'por_r':  # learn V by asymmetric_l2_loss; learn g by weighted BC using the residual
                 por.por_residual_update(**sample_batch(dataset, args.batch_size))
-            elif args.type == 'por_q':  # learn goal policy by q-learning (need to pretrain a behavior goal policy)
+            elif args.type == 'por_q':  # learn V by asymmetric_l2_loss; learn g by q-learning (need to pretrain a behavior goal policy)
                 por.por_qlearning_update(**sample_batch(dataset, args.batch_size))
-            elif args.type == 'por_r_sql':  # learn goal policy by weighted BC using the residual (more stable)
-                por.por_residual_sql_update(**sample_batch(dataset, args.batch_size))
 
             if (step+1) % args.eval_period == 0:
                 average_returns = eval_por(step)
@@ -155,7 +152,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_eval_episodes', type=int, default=50)
     parser.add_argument('--max_episode_steps', type=int, default=1000)
     parser.add_argument("--normalize", action='store_true')
-    parser.add_argument("--type", type=str, choices=['por_r', 'por_q', 'por_r_sql'], default='por_r')
+    parser.add_argument("--layer_norm", action='store_true')
+    parser.add_argument("--type", type=str, choices=['por_r', 'por_q'], default='por_r')
     parser.add_argument("--pretrain", action='store_true')
     # parser.add_argument("--ablation_type", type=str, required=True, choices=['None', 'generlization'])
     now = time.strftime("%Y%m%d_%H%M%S", time.localtime())
