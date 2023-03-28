@@ -18,6 +18,16 @@ class TwinQ(nn.Module):
         return torch.min(*self.both(state, action))
 
 
+class ValueFunction(nn.Module):
+    def __init__(self, state_dim, hidden_dim=256, n_hidden=2):
+        super().__init__()
+        dims = [state_dim, *([hidden_dim] * n_hidden), 1]
+        self.v = mlp(dims, squeeze_output=True)
+
+    def forward(self, state):
+        return self.v(state)
+
+
 class TwinV(nn.Module):
     def __init__(self, state_dim, layer_norm=False, hidden_dim=256, n_hidden=2):
         super().__init__()
@@ -30,13 +40,3 @@ class TwinV(nn.Module):
 
     def forward(self, state):
         return torch.min(*self.both(state))
-
-
-class ValueFunction(nn.Module):
-    def __init__(self, state_dim, hidden_dim=256, n_hidden=2):
-        super().__init__()
-        dims = [state_dim, *([hidden_dim] * n_hidden), 1]
-        self.v = mlp(dims, squeeze_output=True)
-
-    def forward(self, state):
-        return self.v(state)

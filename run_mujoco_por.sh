@@ -21,7 +21,7 @@ for seed in 42; do
 for env in ${env_list[*]}; do
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name $env \
   --type 'por_r' \
   --tau 0.5 \
@@ -38,7 +38,7 @@ let "task=$task+1"
 done
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "hopper-medium-v2" \
   --type 'por_q' \
   --tau 0.7 \
@@ -52,7 +52,7 @@ sleep 2
 let "task=$task+1"
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "hopper-medium-replay-v2" \
   --type 'por_q' \
   --tau 0.7 \
@@ -67,7 +67,7 @@ let "task=$task+1"
 
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "hopper-medium-expert-v2" \
   --type 'por_q' \
   --tau 0.7 \

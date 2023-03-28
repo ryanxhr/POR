@@ -18,7 +18,7 @@ for seed in 42; do
 for env in ${env_list[*]}; do
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name $env \
   --type 'por_r' \
   --tau 0.9 \
@@ -33,7 +33,7 @@ let "task=$task+1"
 done
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "antmaze-umaze-v2" \
   --type 'por_r' \
   --tau 0.9 \
@@ -47,7 +47,7 @@ sleep 2
 let "task=$task+1"
 
 GPU_DEVICE=${GPU_LIST[task%${#GPU_LIST[@]}]}
-CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main.py \
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "antmaze-umaze-diverse-v2" \
   --type 'por_r' \
   --tau 0.9 \
