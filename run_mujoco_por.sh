@@ -56,7 +56,7 @@ CUDA_VISIBLE_DEVICES=$GPU_DEVICE python main_por.py \
   --env_name "hopper-medium-replay-v2" \
   --type 'por_q' \
   --tau 0.7 \
-  --alpha 30.0 \
+  --alpha 50.0 \
   --eval_period 5000 \
   --n_eval_episodes 10 \
   --policy_lr 0.001 \
